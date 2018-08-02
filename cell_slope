@@ -1,0 +1,92 @@
+import os
+import rasterio
+import numba as nb
+import numpy as np
+from osgeo import gdal
+from osgeo import gdal
+import matplotlib.pyplot as plt
+from sklearn import datasets, linear_model
+from sklearn.metrics import mean_squared_error, r2_score
+
+
+def writeTiff(im_data,im_width,im_height,im_bands,im_geotrans,im_proj,path):
+    if 'int8' in im_data.dtype.name:
+        datatype = gdal.GDT_Byte
+    elif 'int16' in im_data.dtype.name:
+        datatype = gdal.GDT_UInt16
+    else:
+        datatype = gdal.GDT_Float32
+
+    if len(im_data.shape) == 3:
+        im_bands, im_height, im_width = im_data.shape
+    elif len(im_data.shape) == 2:
+        im_data = np.array([im_data])
+    else:
+        im_bands, (im_height, im_width) = 1,im_data.shape
+        #创建文件
+    driver = gdal.GetDriverByName("GTiff")
+    dataset = driver.Create(path, im_width, im_height, im_bands, datatype)
+    if(dataset!= None):
+        dataset.SetGeoTransform(im_geotrans) #写入仿射变换参数
+        dataset.SetProjection(im_proj) #写入投影
+    for i in range(im_bands):
+        dataset.GetRasterBand(i+1).WriteArray(im_data[i])
+    del dataset
+path = r'/NDVI'
+out_path = r'0_2000-2010_mean'
+#print(os.walk(path))
+ds = gdal.Open(path+'//'+'NDVI_mean.tif')
+tr = ds.GetGeoTransform()
+prj = ds.GetProjection()
+x = ds.RasterXSize
+y = ds.RasterYSize
+im_bands = ds.RasterCount #波段数
+year = [i for i in range(2000,2011,1)]
+d1= ds.ReadAsArray(0, 0, x, y).reshape(-1, 1)
+d2 = gdal.Open(path+'//'+'2001_NDVI_mean.tif').ReadAsArray(0, 0, x, y).reshape(-1, 1)
+d3 = gdal.Open(path+'//'+'2002_NDVI_mean.tif').ReadAsArray(0, 0, x, y).reshape(-1, 1)
+d4 = gdal.Open(path+'//'+'2003_NDVI_mean.tif').ReadAsArray(0, 0, x, y).reshape(-1, 1)
+d5 = gdal.Open(path+'//'+'2004_NDVI_mean.tif').ReadAsArray(0, 0, x, y).reshape(-1, 1)
+d6 = gdal.Open(path+'//'+'2005_NDVI_mean.tif').ReadAsArray(0, 0, x, y).reshape(-1, 1)
+d7 = gdal.Open(path+'//'+'2006_NDVI_mean.tif').ReadAsArray(0, 0, x, y).reshape(-1, 1)
+d8 = gdal.Open(path+'//'+'2007_NDVI_mean.tif').ReadAsArray(0, 0, x, y).reshape(-1, 1)
+d9 = gdal.Open(path+'//'+'2008_NDVI_mean.tif').ReadAsArray(0, 0, x, y).reshape(-1, 1)
+d10 = gdal.Open(path+'//'+'2009_NDVI_mean.tif').ReadAsArray(0, 0, x, y).reshape(-1, 1)
+d11 = gdal.Open(path+'//'+'2010_NDVI_mean.tif').ReadAsArray(0, 0, x, y).reshape(-1, 1)
+
+slope = []#2000-2010 ndvi
+year = np.array(year).reshape(11,1)
+
+
+#@nb.jit()
+def slope_(d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,n):
+    for i in range(1,n):
+        yy = [d1[i],d2[i],d3[i],d4[i],d5[i],d6[i],d7[i],d8[i],d9[i],d10[i],d11[i]]
+        ndvi = np.array(yy).reshape(11,1)
+        
+
+        # Create linear regression object
+        regr = linear_model.LinearRegression()
+
+    # Train the model using the training sets
+        regr.fit(year,ndvi)
+        
+        slope.append(regr.coef_)
+    #return slope
+slope_numba = nb.decorators.autojit(slope_)
+if __name__ == "__main__":
+  %timeit slope_numba(d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,x*y)
+
+  slope1 = np.array(slope).reshape(y,x)
+  %matplotlib inline
+
+
+
+  #ds = gdal.Open( out_path+'//'+'som.tif')
+  #slope1 = np.array(slope).reshape(-1,2)
+  # Let's extract and plot the pixel values
+  
+  #display the data
+  slope1[slope1 == 31.16299773] = np.nan
+  plt.imshow(slope1)
+  plt.colorbar()
